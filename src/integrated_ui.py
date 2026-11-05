@@ -1,5 +1,9 @@
 """Combined input selection, plotting settings and execution window."""
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+# MPh caches its client and requires every call to originate on one thread.
+_ENGINE_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="COMSOL-Origin")
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QComboBox, QHBoxLayout, QFileDialog, QMessageBox
@@ -38,6 +42,9 @@ class Task(QThread):
     def __init__(self,config,action,parent=None):
         super().__init__(parent); self.config=config; self.action=action
     def run(self):
+        _ENGINE_WORKER.submit(self.execute).result()
+
+    def execute(self):
         try:
             if self.action=='list':
                 from .adapters.comsol_adapter import COMSOLAdapter
