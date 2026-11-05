@@ -39,6 +39,33 @@ def run_checks(config,args):
         assert settings.tabs.count()==5
         settings.close()
         report['checks']['settings']='PASS: five tabs constructed'
+        from .integrated_ui import IntegratedDialog
+        unified=IntegratedDialog(STATE_ROOT/'config.toml')
+        assert unified.tabs.count()==6
+        unified.close()
+        report['checks']['integrated_ui']='PASS: unified COMSOL and Origin settings with graph previews'
+
+        # Verify preset persistence in the actual frozen application, in isolation.
+        import tempfile
+        from .settings_presets import PresetStore
+        with tempfile.TemporaryDirectory(dir=output) as preset_temp:
+            preset_config=Path(preset_temp)/'config.toml'
+            preset_config.write_bytes((RESOURCE_ROOT/'config.default.toml').read_bytes())
+            first=OriginSettingsDialog(preset_config)
+            first.fields[('plot','title')][0].setText('参数记忆打包验证')
+            first.preset_combo.setEditText('已记忆参数')
+            first.remember_preset()
+            first.close()
+            second=OriginSettingsDialog(preset_config)
+            assert second.preset_store.names()==['已记忆参数']
+            second.preset_combo.setCurrentIndex(0)
+            second.load_preset()
+            assert second.fields[('plot','title')][0].text()=='参数记忆打包验证'
+            second.preset_store.delete('已记忆参数')
+            assert PresetStore(preset_config).names()==[]
+            second.close()
+        report['checks']['parameter_presets']='PASS: remember, reopen, load and delete'
+
         for name in ('numpy','pandas','scipy','originpro','OriginExt','MPh','PySide6'):
             report['checks'][name]=importlib.metadata.version(name)
         from .adapters.comsol_adapter import backend, COMSOLAdapter, BACKEND

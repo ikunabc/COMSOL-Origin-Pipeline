@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
     QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTabWidget, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget)
-from .config import load_config, GRAPH_TYPE_MAP, LINE_STYLE_MAP, SYMBOL_MAP, COLOR_MAP
+from .settings_presets import PresetStore
+from .config import validate, load_config, GRAPH_TYPE_MAP, LINE_STYLE_MAP, SYMBOL_MAP, COLOR_MAP
 
 
 def section(config,path):
@@ -84,6 +85,8 @@ class OriginSettingsDialog(QDialog):
         title.setFont(QFont(self.font().family(),16,QFont.Weight.Bold))
         layout.addWidget(title)
         layout.addWidget(QLabel('保存后自动应用于本次导入后的绘图。取消不会修改配置，也不会启动 COMSOL / Origin。'))
+        self.preset_store=PresetStore(self.path)
+        self.build_presets(layout)
         self.tabs=QTabWidget()
         layout.addWidget(self.tabs,1)
         self.build_curves()
@@ -99,6 +102,116 @@ class OriginSettingsDialog(QDialog):
         self.save_button.clicked.connect(self.save)
         buttons.addButton('取消',QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         layout.addWidget(buttons)
+        self.refresh_presets()
+
+    def build_presets(self, layout):
+        row=QHBoxLayout()
+        row.addWidget(QLabel('参数记忆'))
+        self.preset_combo=QComboBox()
+        self.preset_combo.setObjectName('parameterPresetCombo')
+        self.preset_combo.setEditable(True)
+        self.preset_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.preset_combo.lineEdit().setPlaceholderText('选择已记忆的参数，或输入新名称')
+        row.addWidget(self.preset_combo,1)
+        for text, name, callback in (
+                ('记忆当前参数','rememberPresetButton',self.remember_preset),
+                ('载入','loadPresetButton',self.load_preset),
+                ('删除记忆','deletePresetButton',self.delete_preset)):
+            button=QPushButton(text)
+            button.setObjectName(name)
+            button.clicked.connect(callback)
+            row.addWidget(button)
+        layout.addLayout(row)
+        tip=QLabel('记忆可保留多套参数；载入后点击“保存设置”应用。删除记忆不会修改当前参数。')
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
+
+    def refresh_presets(self, selected=''):
+        try:
+            names=self.preset_store.names()
+        except Exception as exc:
+            self.status.setText(str(exc))
+            return
+        self.preset_combo.clear()
+        self.preset_combo.addItems(names)
+        self.preset_combo.setEditText(selected)
+
+    def validated_updates(self, updates):
+        expected=set(self.fields)|{('plot','y_columns'),('plot.legend','labels'),
+                                  ('plot.style','colors'),('plot.style','line_styles')}
+        if set(updates)!=expected:
+            raise ValueError('预设字段与当前版本不兼容，请重新记忆参数。')
+        candidate=deepcopy(self.raw)
+        for (group,key), value in updates.items():
+            section(candidate,group)[key]=value
+        validate(candidate)
+        return updates
+
+    def remember_preset(self):
+        try:
+            name=self.preset_store._name(self.preset_combo.currentText())
+            updates=self.validated_updates(self.collect())
+            if name in self.preset_store.names():
+                answer=QMessageBox.question(self,'覆盖参数记忆',
+                    f'已存在“{name}”，是否用当前参数覆盖？',
+                    QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No)
+                if answer!=QMessageBox.StandardButton.Yes:
+                    return
+            self.preset_store.save(name,updates)
+            self.refresh_presets(name)
+            self.status.setText(f'已记忆“{name}”，下次打开仍可载入。点击“保存设置”应用当前参数。')
+        except Exception as exc:
+            QMessageBox.warning(self,'参数未记忆',str(exc))
+
+    def load_preset(self):
+        try:
+            name=self.preset_combo.currentText().strip()
+            updates=self.preset_store.load(name)
+            self.validated_updates(updates)
+            for key,(widget,kind) in self.fields.items():
+                value=updates[key]
+                if kind=='bool':
+                    widget.setChecked(value)
+                elif kind in ('int','float'):
+                    widget.setValue(value)
+                elif kind=='combo':
+                    widget.setCurrentIndex(widget.findData(value))
+                elif kind=='font':
+                    widget.setCurrentFont(QFont(value))
+                    widget.setEditText(value)
+                else:
+                    widget.setText(str(value))
+            self.curves.setRowCount(0)
+            ys=updates[('plot','y_columns')]
+            labels=updates[('plot.legend','labels')]
+            colors=updates[('plot.style','colors')]
+            styles=updates[('plot.style','line_styles')]
+            for i,y in enumerate(ys):
+                self.add_curve(y,labels[i] if labels else '',
+                               colors[i%len(colors)],styles[i%len(styles)])
+            self.status.setText(f'已载入“{name}”。点击“保存设置”应用；取消可保留原配置。')
+        except KeyError:
+            QMessageBox.warning(self,'未找到参数记忆','请先选择已记忆的参数。')
+        except Exception as exc:
+            QMessageBox.warning(self,'参数未载入',str(exc))
+
+    def delete_preset(self):
+        try:
+            name=self.preset_combo.currentText().strip()
+            if name not in self.preset_store.names():
+                raise ValueError('请先选择要删除的参数记忆。')
+            answer=QMessageBox.question(self,'删除参数记忆',
+                f'删除“{name}”？当前窗口的参数和已保存设置将保留。',
+                QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer!=QMessageBox.StandardButton.Yes:
+                return
+            self.preset_store.delete(name)
+            self.refresh_presets()
+            self.status.setText(f'已删除“{name}”的记忆，当前参数保持不变。')
+        except Exception as exc:
+            QMessageBox.warning(self,'记忆未删除',str(exc))
 
     def tab(self,title):
         page=QWidget()

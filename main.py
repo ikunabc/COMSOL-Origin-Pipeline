@@ -19,7 +19,7 @@ def main(argv=None):
         if sys.version_info<(3,11):
             raise PipelineError('Python 3.11 or later is required.')
         log.info('Loading configuration...')
-        config=load_config(args.config,check_input=not args.dry_run,
+        config=load_config(args.config,check_input=not (args.dry_run or args.check),
                            create_outputs=not (args.dry_run or args.check or args.list_results))
         if args.check:
             from src.diagnostics import check

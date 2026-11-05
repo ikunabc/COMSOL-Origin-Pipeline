@@ -26,6 +26,10 @@ def main():
             from src.settings_ui import run_settings
             run_settings(ROOT/'config.toml')
             return 0
+        if '--smoke-test' not in sys.argv and '--legacy' not in sys.argv:
+            from src.integrated_ui import IntegratedDialog
+            IntegratedDialog(ROOT/'config.toml').exec()
+            return 0
         from src.settings_ui import SettingsButtonInstaller
         settings_filter=SettingsButtonInstaller(ROOT/'config.toml',app)
         app.installEventFilter(settings_filter)
