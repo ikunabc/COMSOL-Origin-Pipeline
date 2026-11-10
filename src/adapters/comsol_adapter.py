@@ -169,7 +169,14 @@ class COMSOLAdapter:
         selected=[i for i in items if (i['tag']==co['result_name'] or i['label']==co['result_name'])
                   and (i['kind']==co['result_type'] or co['result_type']=='plot' and i['kind'] in ('1d','2d','3d'))]
         if len(selected)!=1:
-            raise COMSOLResultNotFoundError(f'Result {co["result_name"]!r} has {len(selected)} matching entries. Use --list-results and an unambiguous tag.')
+            available = [f'{item["tag"]} · {item["label"]} ({item["kind"]})'
+                         for item in items if item['kind'] in ('table', '1d', '2d', '3d')]
+            examples = '\n'.join(available[:8]) or '模型中没有可选结果。'
+            raise COMSOLResultNotFoundError(
+                f'结果 {co["result_name"]!r} 匹配到 {len(selected)} 项。\n'
+                '请点击“识别模型结果或 CSV 数据列”，从下拉框选择结果（命令行可用 --list-results）。\n'
+                f'可用结果示例：\n{examples}'
+            )
         item=selected[0]
         log.info('Extracting result: %s [%s]',item['label'],item['tag'])
         if item['kind']=='table':

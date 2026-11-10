@@ -31,7 +31,7 @@ def test_ambiguous_label(config,monkeypatch):
     config['comsol'].update(result_type='table',result_name='same')
     monkeypatch.setattr(a,'list_available_results',lambda:[
         {'tag':'t1','label':'same','kind':'table'}, {'tag':'t2','label':'same','kind':'table'}])
-    with pytest.raises(COMSOLResultNotFoundError,match='2 matching'):
+    with pytest.raises(COMSOLResultNotFoundError,match='匹配到 2 项'):
         a.extract_dataset()
 
 
