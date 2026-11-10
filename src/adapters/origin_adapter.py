@@ -51,10 +51,12 @@ class OriginAdapter:
         self._project_staging=[]
 
     def connect(self):
-        log.info('Connecting to Origin 2025...')
+        log.info('Connecting to Origin...')
+        stage='加载 originpro'
         try:
             import originpro as op
             self.op=op
+            stage='启动或连接 Origin 实例'
             # Default external originpro creates a private Application.
             # detach only releases any automation reference, never clears a project.
             if self.config['origin']['new_instance']:
@@ -62,15 +64,29 @@ class OriginAdapter:
             else:
                 op.attach()
             op.set_show(self.config['origin']['visible'])
+            stage='读取 Origin 版本'
             version=op.lt_float('@V')
-            if not 10.2 <= version < 10.3:
-                raise RuntimeError(f'Connected Origin reports @V={version}; Origin 2025/2025b required.')
+            stage='检查 Origin 版本'
+            if not 10.1 <= version < 10.3:
+                raise RuntimeError(f'检测到 @V={version}，支持 Origin 2024/2024b/2025/2025b。')
             self.connected=True
             log.info('Origin connected: @V=%s',version)
         except Exception as exc:
-            if self.op:
-                self.op.detach()
-            raise OriginConnectionError('Failed to connect to Origin 2025.\nPlease verify Origin and originpro configuration.') from exc
+            log.exception('Origin 连接失败：%s',stage)
+            if self.op is not None:
+                try:
+                    self.op.detach()
+                except Exception:
+                    log.warning('无法释放 Origin 连接。',exc_info=True)
+            details=[]
+            error=exc
+            seen=set()
+            while error is not None and id(error) not in seen:
+                seen.add(id(error))
+                details.append(f'{type(error).__name__}: {str(error).strip() or repr(error)}')
+                error=error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+            detail='\n'.join(details)
+            raise OriginConnectionError(f'{stage}失败：{detail}') from exc
 
     def create_workbook(self,dataset):
         log.info('Creating workbook...')

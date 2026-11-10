@@ -8,7 +8,7 @@
 
 Windows 用户可以直接到 [Releases](https://github.com/ikunabc/comsol-origin-quick-processing/releases/latest) 下载 EXE，双击打开，不需要安装 Python 或 Git。ZIP 包中另附使用说明和依赖许可证。
 
-电脑上仍需安装并授权 COMSOL 和 Origin 2025/2025b。模型要提前求解；用高版本 COMSOL 保存的模型，需要相应版本才能打开。
+电脑上仍需安装并授权 COMSOL 和 Origin 2024/2024b/2025/2025b。模型要提前求解；用高版本 COMSOL 保存的模型，需要相应版本才能打开。
 
 1. 打开程序，点击 **Open** 选择 MPH 文件。
 2. 在结果列表中勾选要提取的内容。
