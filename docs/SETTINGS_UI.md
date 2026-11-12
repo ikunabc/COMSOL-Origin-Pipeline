@@ -1,5 +1,7 @@
 # Origin 绘图参数
 
+本文说明 GUI 中的绘图和数据处理参数。安装和启动步骤见[项目主页](../README.md#快速开始)。
+
 在主窗口顶部点击“Origin 绘图参数…”。源码版也可以双击 `Origin-Settings.cmd` 单独打开。
 
 ## 怎么填
@@ -30,7 +32,7 @@ X/Y 列填写去掉单位后的表头名称。单位文字只用于标注，不�
 
 ## 开发检查
 
-运行 `python scripts/verify_settings_ui.py` 可以检查页签、设置保存和主窗口按钮。截图输出到 `output/settings_preview/`。
+运行 `uv run --locked --group dev python scripts/verify_settings_ui.py` 可以检查页签、设置保存和主窗口按钮。截图输出到 `output/settings_preview/`。
 
 这个脚本不启动 COMSOL 或 Origin，只检查界面和配置读写。实际提取、绘图与导出需要另做检查。
 

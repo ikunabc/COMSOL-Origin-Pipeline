@@ -1,0 +1,58 @@
+[project]
+name = "comsol-origin-quick-processing"
+version = "0.1.0"
+description = "Process COMSOL results and plot them in Origin"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+authors = [
+    { name = "Skrepy0", email = "155234406+Skrepy0@users.noreply.github.com" },
+    { name = "ikunabc", email = "122463590+ikunabc@users.noreply.github.com" },
+]
+dependencies = [
+    "pandas>=2.2,<4",
+    "numpy>=1.26,<3",
+    "scipy>=1.12,<2",
+    "MPh>=1.2,<2",
+    "originpro>=1.1,<2",
+    "psutil>=5.9",
+    "PySide6",
+    "matplotlib",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "Pillow>=10", "pypdf>=5", "poethepoet", "ruff", "mypy"]
+build = ["pyinstaller==6.22.3"]
+
+[tool.uv]
+package = false
+default-groups = []
+
+[tool.poe.tasks]
+test = "python -m pytest -q"
+lint = "ruff check main.py gui_main.py origin_settings.py src scripts tests"
+format = "ruff format main.py gui_main.py origin_settings.py src scripts tests"
+fmt-check = "ruff format --check main.py gui_main.py origin_settings.py src scripts tests"
+typecheck = "mypy src"
+validate = "python main.py --config config.example-csv.toml --dry-run"
+check = ["lint", "fmt-check", "typecheck", "validate", "test"]
+build = "python scripts/build_windows.py"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["lib"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["UP036"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.mypy]
+disable_error_code = ["import-untyped", "import-not-found"]

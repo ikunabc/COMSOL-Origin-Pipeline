@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-cache/
+.pytest-tmp/
+.pytest-run/
+.pytest-run-cache/
 logs/*
 !logs/.gitkeep
 data/input/*
@@ -35,6 +39,6 @@ build/
 dist/
 release/
 bundle-test/
-
+.idea
 # Personal parameter presets
 parameter_presets.json

@@ -1,5 +1,7 @@
 # Windows 使用说明
 
+本文面向从 Releases 下载 EXE 或 ZIP 的用户。从源码运行请返回[项目主页](../README.md#从源码运行)。
+
 ## 启动
 
 到 [Releases](https://github.com/ikunabc/comsol-origin-quick-processing/releases/latest) 下载 Windows x64 EXE，双击打开。如果下载的是 ZIP，先解压，再运行其中的 `COMSOLOrigin.exe`。
@@ -22,13 +24,12 @@
 
 ## 从源码打包
 
-在 Windows x64、Python 3.11 或 3.12 环境中执行：
+在 Windows x64、Python 3.11 或 3.12 环境中安装 uv 后执行：
 
 ```powershell
 git clone --recurse-submodules https://github.com/ikunabc/comsol-origin-quick-processing.git
 cd comsol-origin-quick-processing
-python -m pip install -r requirements-build.txt
-python scripts/build_windows.py
+uv run --locked --group dev --group build poe build
 ```
 
 生成的文件为 `dist/COMSOLOrigin.exe`。打包清单在 `COMSOLOrigin.spec`，包含 Python、Qt、数据处理依赖和上游提取模块，不包含 COMSOL 引擎和 Origin 桌面程序。
@@ -45,3 +46,5 @@ python scripts/build_windows.py
 检查报告放在 `%LOCALAPPDATA%\COMSOLOrigin\bundle-test`，验证工程放在当前工作目录的 `bundle-test` 中。报告中的 PASS 表示脚本内检查通过，进程能否正常退出也需要另外确认。
 
 当前构建在本机 Windows 11 上做过检查；Windows 10 和全新无 Python 虚拟机尚未单独实测。
+
+这些检查参数用于构建和发布验证，普通使用不需要执行。其他文档见[文档索引](README.md)。
