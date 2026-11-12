@@ -35,6 +35,7 @@ fmt-check = "ruff format --check main.py gui_main.py origin_settings.py src scri
 typecheck = "mypy src"
 validate = "python main.py --config config.example-csv.toml --dry-run"
 check = ["lint", "fmt-check", "typecheck", "validate", "test"]
+build = "python scripts/build_windows.py"
 
 [tool.ruff]
 target-version = "py311"
