@@ -14,7 +14,7 @@
 
 ### 从源码运行
 
-需要 Git、64 位 Python 3.11 或 3.12，以及已安装并授权的 COMSOL 和 Origin。
+需要 Git、uv、64 位 Python 3.11 或 3.12，以及已安装并授权的 COMSOL 和 Origin。
 
 ```powershell
 git clone --recurse-submodules https://github.com/ikunabc/comsol-origin-quick-processing.git
@@ -23,7 +23,7 @@ cd comsol-origin-quick-processing
 .\Start-GUI.cmd
 ```
 
-首次运行 `Setup-GUI.cmd` 会创建 `.venv`、初始化 Git 子模块并安装依赖。以后只需运行 `Start-GUI.cmd`。单独编辑 Origin 绘图参数可运行 `Origin-Settings.cmd`。
+首次运行 `Setup-GUI.cmd` 会初始化 Git 子模块，并通过 `uv sync --locked` 创建 `.venv`、安装锁定的依赖。以后只需运行 `Start-GUI.cmd`。单独编辑 Origin 绘图参数可运行 `Origin-Settings.cmd`。
 
 如果克隆时没有下载子模块，重新执行：
 
@@ -62,19 +62,19 @@ CLI 和集成 GUI 按配置生成：
 
 ## 命令行
 
-默认使用项目根目录的 `config.toml`。源码安装后可以直接使用虚拟环境中的 Python：
+默认使用项目根目录的 `config.toml`：
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+uv run --locked python main.py
 ```
 
 常用检查命令：
 
 ```powershell
-.\.venv\Scripts\python.exe main.py --check
-.\.venv\Scripts\python.exe main.py --dry-run
-.\.venv\Scripts\python.exe main.py --list-results
-.\.venv\Scripts\python.exe main.py --config config.example-csv.toml
+uv run --locked python main.py --check
+uv run --locked python main.py --dry-run
+uv run --locked python main.py --list-results
+uv run --locked python main.py --config config.example-csv.toml
 ```
 
 | 参数 | 作用 |
@@ -123,11 +123,11 @@ COMSOL/CSV → 数据清洗与处理 → Origin 工作簿 → 绘图 → 图片�
 
 **找不到 COMSOL 或许可证错误**
 
-先确认 COMSOL 可以单独打开目标模型，再运行 `.\.venv\Scripts\python.exe main.py --check`。配置中的 `[comsol].version` 必须与已安装版本匹配。
+先确认 COMSOL 可以单独打开目标模型，再运行 `uv run --locked python main.py --check`。配置中的 `[comsol].version` 必须与已安装版本匹配。
 
 **找不到结果或数据列**
 
-使用界面中的识别功能，或运行 `.\.venv\Scripts\python.exe main.py --list-results` 查看结果 Tag。X/Y 列使用去掉单位后的表头名称；清理后重名的列需要在 `[comsol.column_map]` 中分别命名。
+使用界面中的识别功能，或运行 `uv run --locked python main.py --list-results` 查看结果 Tag。X/Y 列使用去掉单位后的表头名称；清理后重名的列需要在 `[comsol.column_map]` 中分别命名。
 
 **Origin 无法连接**
 
@@ -144,17 +144,21 @@ COMSOL/CSV → 数据清洗与处理 → Origin 工作簿 → 绘图 → 图片�
 ## 开发与测试
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe scripts/verify_settings_ui.py
+uv sync --locked --group dev
+uv run --locked --group dev poe check
+uv run --locked --group dev python scripts/verify_settings_ui.py
 ```
+
+`poe check` 依次运行 Ruff lint、格式检查、mypy、配置 dry-run 和测试。单项检查可用 `uv run --locked --group dev poe test`、`poe lint`、`poe fmt-check`、`poe typecheck` 或 `poe validate`；需要整理格式时运行 `poe format`。
+
+完成 `uv sync --locked --group dev` 后，也可直接运行 `uv run poe check`。pytest 将临时文件和缓存分别放在项目根目录的 `.pytest-run/`、`.pytest-run-cache/`，避免使用无权限的系统临时目录；两者均不会提交到 Git。
 
 连接真实软件的检查需要单独运行：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/verify_origin.py
-.\.venv\Scripts\python.exe scripts/verify_images.py
-.\.venv\Scripts\python.exe scripts/verify_comsol.py
+uv run --locked --group dev python scripts/verify_origin.py
+uv run --locked --group dev python scripts/verify_images.py
+uv run --locked --group dev python scripts/verify_comsol.py
 ```
 
 Origin 接口依据见 [API 审计](docs/API_AUDIT.md)。更新上游子模块、COMSOL、Origin 或 `originpro` 后，应重新检查对应接口和真实运行结果。

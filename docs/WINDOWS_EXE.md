@@ -24,13 +24,13 @@
 
 ## 从源码打包
 
-在 Windows x64、Python 3.11 或 3.12 环境中执行：
+在 Windows x64、Python 3.11 或 3.12 环境中安装 uv 后执行：
 
 ```powershell
 git clone --recurse-submodules https://github.com/ikunabc/comsol-origin-quick-processing.git
 cd comsol-origin-quick-processing
-python -m pip install -r requirements-build.txt
-python scripts/build_windows.py
+uv sync --locked --group build
+uv run --locked --group build python scripts/build_windows.py
 ```
 
 生成的文件为 `dist/COMSOLOrigin.exe`。打包清单在 `COMSOLOrigin.spec`，包含 Python、Qt、数据处理依赖和上游提取模块，不包含 COMSOL 引擎和 Origin 桌面程序。

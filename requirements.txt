@@ -1,6 +1,0 @@
-pandas>=2.2,<4
-numpy>=1.26,<3
-scipy>=1.12,<2
-MPh>=1.2,<2
-originpro>=1.1,<2
-psutil>=5.9
