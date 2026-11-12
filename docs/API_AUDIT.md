@@ -1,12 +1,16 @@
 # API audit
 
+This is a developer record for the pinned COMSOL extraction backend and the
+Origin interfaces used by this project. It is not an end-user setup guide.
+
 Backend: https://github.com/GhVost/COMSOL-to-CSV-and-Origin-parser
 
 Pinned commit: `4c63ac17fbb6272603a893e0233c6d27aa485180`.
-Inspected README.md, pyproject.toml, requirements.txt, requirements-origin.txt,
-COMSOLExtractor.py, extraction.py, origin_push.py and all three tests files.
-There is no root `__init__.py`; pyproject.toml only configures pytest/ruff.
-There is no packaged, versioned public API. The adapter loads extraction.py
+The upstream audit inspected its README.md, pyproject.toml, requirements.txt,
+requirements-origin.txt, COMSOLExtractor.py, extraction.py, origin_push.py and
+three test files. The upstream root has no `__init__.py`; its pyproject.toml
+only configures pytest/ruff. There is no packaged, versioned public API.
+The adapter loads extraction.py
 under a private module name using importlib, without importing the GUI entry point.
 
 | Question | Source-confirmed behavior |

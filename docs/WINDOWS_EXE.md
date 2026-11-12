@@ -1,5 +1,7 @@
 # Windows 使用说明
 
+本文面向从 Releases 下载 EXE 或 ZIP 的用户。从源码运行请返回[项目主页](../README.md#从源码运行)。
+
 ## 启动
 
 到 [Releases](https://github.com/ikunabc/comsol-origin-quick-processing/releases/latest) 下载 Windows x64 EXE，双击打开。如果下载的是 ZIP，先解压，再运行其中的 `COMSOLOrigin.exe`。
@@ -45,3 +47,5 @@ python scripts/build_windows.py
 检查报告放在 `%LOCALAPPDATA%\COMSOLOrigin\bundle-test`，验证工程放在当前工作目录的 `bundle-test` 中。报告中的 PASS 表示脚本内检查通过，进程能否正常退出也需要另外确认。
 
 当前构建在本机 Windows 11 上做过检查；Windows 10 和全新无 Python 虚拟机尚未单独实测。
+
+这些检查参数用于构建和发布验证，普通使用不需要执行。其他文档见[文档索引](README.md)。

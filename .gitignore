@@ -35,6 +35,6 @@ build/
 dist/
 release/
 bundle-test/
-
+.idea
 # Personal parameter presets
 parameter_presets.json
