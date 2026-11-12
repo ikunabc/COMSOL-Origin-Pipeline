@@ -57,5 +57,29 @@ def test_adaptive_result_and_column_choices(tmp_path, monkeypatch):
         assert settings[('comsol', 'result_name')] == 'tbl2'
         assert settings[('plot', 'x_column')] == 'position'
         assert settings[('plot', 'y_columns')] == ['voltage']
+        title = dialog.fields[('plot', 'title')][0]
+        title.setText('First plot')
+        dialog.add_plot_button.click()
+        title.setText('Second plot')
+        dialog.add_plot_button.click()
+        title.setText('Unqueued edit')
+        calls = []
+        from src import pipeline
+        def run_batch(configs):
+            calls.append(configs)
+            return [None, None], None
+        monkeypatch.setattr(pipeline, 'run_batch', run_batch)
+        original = config.read_bytes()
+        dialog.run_button.click()
+        assert dialog.worker.wait(5000)
+        app.processEvents()
+        assert [item['plot']['title'] for item in calls[0]] == ['First plot', 'Second plot']
+        assert config.read_bytes() == original
+        assert '2 个 Origin 图窗' in dialog.status.text()
+        dialog.plot_queue.setCurrentIndex(0)
+        dialog.replace_plot_button.click()
+        dialog.plot_queue.setCurrentIndex(1)
+        dialog.remove_plot_button.click()
+        assert [item[('plot', 'title')] for item in dialog.pending_plots] == ['Unqueued edit']
     finally:
         dialog.close()

@@ -1,5 +1,6 @@
 """Combined input selection, plotting settings and execution window."""
 from pathlib import Path
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 
 # MPh caches its client and requires every call to originate on one thread.
@@ -7,8 +8,8 @@ _ENGINE_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="COMSOL-Or
 from PySide6.QtCore import QThread, Signal, Qt, QTimer
 from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QComboBox, QHBoxLayout, QFileDialog, QMessageBox
-from .settings_ui import OriginSettingsDialog, save_updates
-from .config import load_config
+from .settings_ui import OriginSettingsDialog, save_updates, section
+from .config import load_config, prepare_config
 
 
 class GraphPreview(QWidget):
@@ -57,6 +58,11 @@ class Task(QThread):
                         result=[name for name in data.select_dtypes(include='number')
                                 if data[name].notna().any()]
                 finally: adapter.close()
+            elif self.action=='batch':
+                from .pipeline import run_batch
+                figures,project=run_batch(self.config)
+                result={'count':len(figures),'figures':[str(path) for path in figures if path],
+                        'project':str(project) if project else None}
             else:
                 from .pipeline import run
                 _,figure,project=run(self.config)
@@ -71,6 +77,7 @@ class IntegratedDialog(OriginSettingsDialog):
         self.columns=[]
         self.scanned_source=None
         self.scanned_result=None
+        self.pending_plots=[]
         super().__init__(path,parent)
         self.setWindowTitle('COMSOL → Origin · 读取与绘图')
         self.findChildren(QLabel)[0].setText('COMSOL 读取与 Origin 绘图')
@@ -101,9 +108,28 @@ class IntegratedDialog(OriginSettingsDialog):
         combo=self.fields[('plot','graph_type')][0]
         combo.currentIndexChanged.connect(self.update_preview)
         self.update_preview()
-        self.run_button=QPushButton('保存参数并读取 → 生成 Origin 图形')
-        self.run_button.clicked.connect(lambda:self.start_task('run'))
+        self.queue_panel=QWidget()
+        queue_row=QHBoxLayout(self.queue_panel)
+        queue_row.setContentsMargins(0,0,0,0)
+        queue_row.addWidget(QLabel('待出图'))
+        self.plot_queue=QComboBox()
+        self.plot_queue.setMinimumContentsLength(16)
+        self.plot_queue.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        queue_row.addWidget(self.plot_queue,1)
+        self.add_plot_button=QPushButton('加入当前图')
+        self.add_plot_button.clicked.connect(lambda:self.queue_plot())
+        queue_row.addWidget(self.add_plot_button)
+        self.replace_plot_button=QPushButton('用当前参数替换')
+        self.replace_plot_button.clicked.connect(lambda:self.queue_plot(replace=True))
+        queue_row.addWidget(self.replace_plot_button)
+        self.remove_plot_button=QPushButton('移除选中图')
+        self.remove_plot_button.clicked.connect(self.remove_queued_plot)
+        queue_row.addWidget(self.remove_plot_button)
+        self.layout().addWidget(self.queue_panel)
+        self.run_button=QPushButton()
+        self.run_button.clicked.connect(lambda:self.start_task('batch' if self.pending_plots else 'run'))
         self.layout().addWidget(self.run_button)
+        self.refresh_queue()
         self.worker=None
         self.tabs.setCurrentIndex(0)
         self.refresh_presets()
@@ -179,21 +205,80 @@ class IntegratedDialog(OriginSettingsDialog):
             combo.setCurrentIndex(combo.findData(item['kind']))
             self.start_task('columns')
 
+    def current_plot_updates(self):
+        if (self.scanned_source!=self.source_settings()
+                or self.scanned_result!=self.selected_result() or not self.columns):
+            raise ValueError('请先识别结果和数据列。')
+        x=self.x_choice.currentData()
+        ys=[self.curves.cellWidget(row,0).currentData() for row in range(self.curves.rowCount())]
+        if not x or not ys or any(y is None for y in ys):
+            raise ValueError('请从下拉框选择 X 列和每条曲线的 Y 列。')
+        return self.collect()
+
+    def common_origin_updates(self):
+        return {('origin',key): widget.isChecked() if kind=='bool' else widget.text().strip()
+                for (group,key),(widget,kind) in self.fields.items() if group=='origin'}
+
+    def plot_config(self,updates,create_outputs=False):
+        candidate=deepcopy(self.raw)
+        for (group,key),value in (updates | self.common_origin_updates()).items():
+            section(candidate,group)[key]=deepcopy(value)
+        return prepare_config(candidate,self.path,create_outputs=create_outputs)
+
+    def refresh_queue(self,selected=0):
+        self.plot_queue.clear()
+        for index,updates in enumerate(self.pending_plots,1):
+            title=updates[('plot','title')]
+            x=updates[('plot','x_column')]
+            ys=', '.join(updates[('plot','y_columns')])
+            self.plot_queue.addItem(f'{index}. {title or ys}  [X: {x}；Y: {ys}]')
+        count=len(self.pending_plots)
+        if not count:
+            self.plot_queue.addItem('尚未添加图形')
+        self.plot_queue.setCurrentIndex(min(selected,max(0,count-1)))
+        self.plot_queue.setEnabled(bool(count))
+        self.replace_plot_button.setEnabled(bool(count))
+        self.remove_plot_button.setEnabled(bool(count))
+        self.run_button.setText(f'在同一 Origin 工程中生成全部 {count} 张图'
+                                if count else '保存参数并读取 → 生成当前图形')
+
+    def queue_plot(self,replace=False):
+        try:
+            updates=self.current_plot_updates()
+            self.plot_config(updates)
+        except Exception as exc:
+            QMessageBox.warning(self,'无法加入待出图',str(exc))
+            return
+        index=self.plot_queue.currentIndex() if replace else len(self.pending_plots)
+        if replace:
+            self.pending_plots[index]=updates
+        else:
+            self.pending_plots.append(updates)
+        self.refresh_queue(index)
+        self.status.setText('已记录当前图的参数。修改后可继续加入；只有列表中的图会批量生成。')
+
+    def remove_queued_plot(self):
+        index=self.plot_queue.currentIndex()
+        if self.pending_plots and index>=0:
+            self.pending_plots.pop(index)
+            self.refresh_queue(index)
+            self.status.setText('已移除选中的待出图。')
+
     def start_task(self,action):
         try:
             source=self.source_settings()
             if action=='list' and source['mode']=='csv':
                 action='columns'
             if action=='run':
-                if (self.scanned_source!=source or self.scanned_result!=self.selected_result()
-                        or not self.columns):
-                    raise ValueError('请先识别结果和数据列。')
-                x=self.x_choice.currentData()
-                ys=[self.curves.cellWidget(row,0).currentData() for row in range(self.curves.rowCount())]
-                if not x or not ys or any(y is None for y in ys):
-                    raise ValueError('请从下拉框选择 X 列和每条曲线的 Y 列。')
-                save_updates(self.path,self.collect())
+                save_updates(self.path,self.current_plot_updates())
                 config=load_config(self.path)
+            elif action=='batch':
+                config=[]
+                for index,updates in enumerate(self.pending_plots,1):
+                    try:
+                        config.append(self.plot_config(updates,create_outputs=True))
+                    except Exception as exc:
+                        raise ValueError(f'第 {index} 张图的参数有误：{exc}') from exc
             else:
                 config=load_config(self.path,check_input=False,create_outputs=False)
                 config['comsol'].update(source)
@@ -214,7 +299,8 @@ class IntegratedDialog(OriginSettingsDialog):
             return
         self.set_busy(True)
         self.status.setText({'list':'正在读取模型结果…','columns':'正在识别数据列…',
-                             'run':'正在读取数据并生成图形…'}[action])
+                             'run':'正在读取数据并生成图形…',
+                             'batch':f'正在生成 {len(self.pending_plots)} 张图…'}[action])
         self.worker=Task(config,action,self)
         self.worker.done.connect(lambda result:self.completed(action,result,source))
         self.worker.failed.connect(self.failed)
@@ -224,6 +310,7 @@ class IntegratedDialog(OriginSettingsDialog):
     def set_busy(self,busy):
         self.tabs.setEnabled(not busy)
         self.run_button.setEnabled(not busy)
+        self.queue_panel.setEnabled(not busy)
         self.save_button.setEnabled(not busy)
         self.preset_combo.parentWidget().setCursor(Qt.CursorShape.WaitCursor if busy else Qt.CursorShape.ArrowCursor)
     def completed(self,action,result,source):
@@ -254,6 +341,13 @@ class IntegratedDialog(OriginSettingsDialog):
             self.tabs.setCurrentIndex(1)
             self.status.setText(f'已识别 {len(result)} 个数值列，请选择 X 和 Y。'
                                 if len(result)>=2 else '该结果少于两个有效数值列，请选择其他结果。')
+        elif action=='batch':
+            message=f"已生成 {result['count']} 个 Origin 图窗。"
+            if result['project']:
+                message+=f"\n工程：{result['project']}"
+            if result['figures']:
+                message+='\n已导出图片：'+ '、'.join(result['figures'])
+            self.status.setText(message)
         else:
             self.status.setText(f"图形：{result['figure']}\n工程：{result['project']}")
     def failed(self,message):

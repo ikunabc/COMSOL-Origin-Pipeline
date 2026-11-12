@@ -48,6 +48,12 @@ def load_config(path='config.toml', check_input=True, create_outputs=True):
             c = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigError(f'Cannot read configuration {path}: {exc}') from exc
+    return prepare_config(c, path, check_input, create_outputs)
+
+
+def prepare_config(c, path, check_input=True, create_outputs=True):
+    """Validate and resolve an independent, in-memory configuration."""
+    path = Path(path).resolve()
     try:
         validate(c)
     except (KeyError, TypeError, AttributeError) as exc:
