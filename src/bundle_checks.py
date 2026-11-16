@@ -50,9 +50,12 @@ def run_checks(config, args):
         settings.close()
         report["checks"]["settings"] = "PASS: five tabs constructed"
         from .integrated_ui import IntegratedDialog
+        from .native_export import export_native_plots
 
         unified = IntegratedDialog(STATE_ROOT / "config.toml")
         assert unified.tabs.count() == 6
+        assert unified.native_button.text().startswith("批量导出 COMSOL 原图")
+        assert callable(export_native_plots)
         unified.close()
         report["checks"]["integrated_ui"] = (
             "PASS: unified COMSOL and Origin settings with graph previews"

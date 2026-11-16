@@ -7,11 +7,16 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -63,13 +68,15 @@ class Task(QThread):
 
     def execute(self):
         try:
-            if self.action in ("list", "columns"):
+            if self.action in ("list", "columns", "native-list"):
                 from .adapters.comsol_adapter import COMSOLAdapter
 
                 adapter = COMSOLAdapter(self.config)
                 try:
                     if self.action == "list":
                         result = adapter.list_available_results()
+                    elif self.action == "native-list":
+                        result = adapter.list_plot_groups()
                     else:
                         data = adapter.extract_dataset().data
                         result = [
@@ -79,6 +86,10 @@ class Task(QThread):
                         ]
                 finally:
                     adapter.close()
+            elif self.action == "native-export":
+                from .native_export import export_native_plots
+
+                result = export_native_plots(self.config)
             elif self.action == "batch":
                 from .pipeline import run_batch
 
@@ -145,6 +156,9 @@ class IntegratedDialog(OriginSettingsDialog):
         self.read_button = QPushButton("识别模型结果或 CSV 数据列")
         self.read_button.clicked.connect(lambda: self.start_task("list"))
         form.addRow("", self.read_button)
+        self.native_button = QPushButton("批量导出 COMSOL 原图…")
+        self.native_button.clicked.connect(lambda: self.start_task("native-list"))
+        form.addRow("", self.native_button)
         self.results.activated.connect(self.select_result)
         form.addRow(QLabel("选定模型结果后自动识别数据列。在“曲线与数据”中选择 X/Y。"))
         self.field(form, "显示 Origin 窗口", "origin", "visible", "bool")
@@ -338,12 +352,23 @@ class IntegratedDialog(OriginSettingsDialog):
             self.refresh_queue(index)
             self.status.setText("已移除选中的待出图。")
 
-    def start_task(self, action):
+    def start_task(self, action, tags=None, directory=None):
         try:
             source = self.source_settings()
             if action == "list" and source["mode"] == "csv":
                 action = "columns"
-            if action == "run":
+            if action.startswith("native-"):
+                model = (self.path.parent / source["model"]).resolve()
+                if source["mode"] != "mph" or model.suffix.lower() != ".mph" or not model.is_file():
+                    raise ValueError("请在 COMSOL 读取页选择一个已求解的 MPH 模型。")
+                config = {"comsol": {**source, "model": model}}
+                if action == "native-export":
+                    config.update(
+                        tags=tags,
+                        directory=directory,
+                        visible=self.common_origin_updates()[("origin", "visible")],
+                    )
+            elif action == "run":
                 save_updates(self.path, self.current_plot_updates())
                 config = load_config(self.path)
             elif action == "batch":
@@ -378,14 +403,21 @@ class IntegratedDialog(OriginSettingsDialog):
                 "columns": "正在识别数据列…",
                 "run": "正在读取数据并生成图形…",
                 "batch": f"正在生成 {len(self.pending_plots)} 张图…",
+                "native-list": "正在读取 COMSOL 绘图组…",
+                "native-export": f"正在导出 {len(tags or [])} 张 COMSOL 原图…",
             }[action]
         )
         self.worker = Task(config, action, self)
-        self.worker.done.connect(lambda result: self.completed(action, result, source))
-        self.worker.failed.connect(self.failed)
-        self.worker.finished.connect(lambda: self.set_busy(False) if self.worker is task else None)
         task = self.worker
-        self.worker.start()
+        if action == "native-list":
+            pending = []
+            task.done.connect(pending.append)
+            task.finished.connect(lambda: self.finish_native_list(task, pending))
+        else:
+            task.done.connect(lambda result: self.completed(action, result, source))
+            task.finished.connect(lambda: self.set_busy(False) if self.worker is task else None)
+        task.failed.connect(self.failed)
+        task.start()
 
     def set_busy(self, busy):
         self.tabs.setEnabled(not busy)
@@ -430,6 +462,19 @@ class IntegratedDialog(OriginSettingsDialog):
                 if len(result) >= 2
                 else "该结果少于两个有效数值列，请选择其他结果。"
             )
+        elif action == "native-export":
+            message = f"已导出 {len(result['files'])} 张 PNG。\n目录：{result['directory']}"
+            if result["project"]:
+                message += f"\nOrigin 工程：{result['project']}"
+            if result["project_error"]:
+                message += f"\nOrigin 工程未保存：{result['project_error']}"
+            if result["failures"]:
+                message += f"\n失败 {len(result['failures'])} 张。"
+            if result["failures"] or result["project_error"]:
+                QMessageBox.warning(
+                    self, "批量导出未全部完成", "\n".join([message, *result["failures"]])
+                )
+            self.status.setText(message)
         elif action == "batch":
             message = f"已生成 {result['count']} 个 Origin 图窗。"
             if result["project"]:
@@ -439,6 +484,60 @@ class IntegratedDialog(OriginSettingsDialog):
             self.status.setText(message)
         else:
             self.status.setText(f"图形：{result['figure']}\n工程：{result['project']}")
+
+    def finish_native_list(self, task, pending):
+        if self.worker is not task:
+            return
+        self.set_busy(False)
+        if pending:
+            groups = pending[0]
+            self.status.setText(f"已识别 {len(groups)} 个 COMSOL 绘图组。")
+            self.choose_native_plots(groups)
+
+    def choose_native_plots(self, groups):
+        if not groups:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("批量导出 COMSOL 原图")
+        dialog.resize(570, 480)
+        layout = QVBoxLayout(dialog)
+        hint = QLabel("每组导出一张 COMSOL 原图（PNG），并嵌入同一个 Origin 工程（OPJU）。")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        items = QListWidget()
+        layout.addWidget(items)
+        for group in groups:
+            item = QListWidgetItem(f"{group['label']}  [{group['kind']} · {group['tag']}]", items)
+            item.setData(Qt.ItemDataRole.UserRole, group["tag"])
+            item.setCheckState(Qt.CheckState.Unchecked)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        export = buttons.addButton("选择目录并导出…", QDialogButtonBox.ButtonRole.AcceptRole)
+        select_all = buttons.addButton("全选", QDialogButtonBox.ButtonRole.ActionRole)
+        layout.addWidget(buttons)
+
+        def selected_tags():
+            return [
+                items.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(items.count())
+                if items.item(i).checkState() == Qt.CheckState.Checked
+            ]
+
+        def check_all():
+            for i in range(items.count()):
+                items.item(i).setCheckState(Qt.CheckState.Checked)
+
+        export.setEnabled(False)
+        items.itemChanged.connect(lambda: export.setEnabled(bool(selected_tags())))
+        select_all.clicked.connect(check_all)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        directory = QFileDialog.getExistingDirectory(
+            self, "选择 PNG 和 Origin 工程的输出目录", str(self.path.parent)
+        )
+        if directory:
+            self.start_task("native-export", selected_tags(), directory)
 
     def failed(self, message):
         self.status.setText("执行失败：" + message)

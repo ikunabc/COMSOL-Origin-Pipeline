@@ -4,10 +4,12 @@ import csv
 import importlib.util
 import io
 import logging
+import re
 import sys
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -199,6 +201,61 @@ class COMSOLAdapter:
         if self.model is None:
             self.load_comsol_model()
         return call_backend(backend().discover_items, self.model)
+
+    def list_plot_groups(self):
+        return [
+            {key: item[key] for key in ("tag", "label", "kind")}
+            for item in self.list_available_results()
+            if item["kind"] in ("1d", "2d", "3d")
+        ]
+
+    def export_plot_groups(self, tags, directory):
+        from PIL import Image
+
+        groups = {item["tag"]: item for item in self.list_plot_groups()}
+        if not tags or len(set(tags)) != len(tags) or any(tag not in groups for tag in tags):
+            raise COMSOLModelError("请重新读取模型并勾选有效的绘图组。")
+        directory = Path(directory)
+        output = Path(tempfile.mkdtemp(prefix="COMSOL-", dir=directory))
+        results = self.model.java.result()
+        exports = results.export()
+        files, failures = [], []
+        for index, tag in enumerate(tags, 1):
+            label = groups[tag]["label"]
+            name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", f"{tag} - {label}")[:80].rstrip(" .")
+            destination = output / f"{index:02d} - {name}.png"
+            temporary = output / f"{index:02d}.partial.png"
+            export_tag = f"img{uuid4().hex}"
+            try:
+                # Native Image export renders every active feature in the plot group.
+                export = exports.create(export_tag, tag, "Image")
+                export.set("target", "file")
+                export.set("imagetype", "png")
+                export.set("pngfilename", str(temporary))
+                kind = groups[tag]["kind"]
+                export.set(f"options{kind}", "on")
+                export.set(f"legend{kind}", "on")
+                results.get(tag).run()
+                export.run()
+                with Image.open(temporary) as image:
+                    if image.format != "PNG":
+                        raise COMSOLModelError("COMSOL 未生成 PNG 图片。")
+                    image.load()
+                temporary.replace(destination)
+                files.append(destination)
+            except Exception as exc:
+                log.exception("Failed to export plot group %s", tag)
+                failures.append(f"{tag} · {label}：{exc}")
+            finally:
+                temporary.unlink(missing_ok=True)
+                try:
+                    if export_tag in map(str, exports.tags()):
+                        exports.remove(export_tag)
+                except Exception:
+                    log.warning(
+                        "Could not remove temporary image export %s", export_tag, exc_info=True
+                    )
+        return {"directory": output, "files": files, "failures": failures}
 
     def extract_dataset(self):
         co = self.config["comsol"]

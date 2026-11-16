@@ -41,8 +41,13 @@ def main():
             run_settings(ROOT / "config.toml")
             return 0
         if "--smoke-test" not in sys.argv and "--legacy" not in sys.argv:
+            import mph
+
             from src.integrated_ui import IntegratedDialog
 
+            # Use the local rendering engine for native plot-group image exports.
+            if sys.platform == "win32":
+                mph.option("session", "stand-alone")
             IntegratedDialog(ROOT / "config.toml").exec()
             return 0
         from src.settings_ui import SettingsButtonInstaller
