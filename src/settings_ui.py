@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject
-from PySide6.QtGui import QColor, QFont, QFontDatabase
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import COLOR_MAP, X_DATA_RANGE_DEFAULTS, load_config, validate
+from .runtime import APP_ICON
 from .settings_presets import PresetStore
 
 
@@ -112,6 +113,7 @@ class OriginSettingsDialog(QDialog):
     def __init__(self, path, parent=None):
         ensure_ui_font()
         super().__init__(parent)
+        self.setWindowIcon(QIcon(str(APP_ICON)))
         self.path = Path(path)
         self.raw = tomllib.loads(self.path.read_text(encoding="utf-8"))
         self.fields = {}

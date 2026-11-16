@@ -3,7 +3,7 @@
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 
-from src.runtime import RESOURCE_ROOT, STATE_ROOT, prepare_state
+from src.runtime import APP_ICON, RESOURCE_ROOT, STATE_ROOT, prepare_state
 
 ROOT = STATE_ROOT
 
@@ -21,9 +21,11 @@ def main():
             import os
 
             os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtGui import QIcon
         from PySide6.QtWidgets import QApplication, QMessageBox
 
         app = QApplication.instance() or QApplication(sys.argv[:1])
+        app.setWindowIcon(QIcon(str(APP_ICON)))
         c = load_config(ROOT / "config.toml", check_input=False)
         if (
             "--bundle-check" in sys.argv

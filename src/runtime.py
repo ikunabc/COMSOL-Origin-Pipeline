@@ -7,6 +7,7 @@ from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
 RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+APP_ICON = RESOURCE_ROOT / "assets" / "comsol-origin.png"
 STATE_ROOT = (
     (Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "COMSOLOrigin")
     if FROZEN

@@ -5,6 +5,7 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 root=Path(SPECPATH)
 backend=root/'lib/comsol_csv_tool'
 datas=[(str(root/'config.default.toml'),'.'),
+       (str(root/'assets/comsol-origin.png'),'assets'),
        (str(root/'data/input/example.csv'),'data/input'),
        (str(root/'README.md'),'.'),
        (str(root/'docs/THIRD_PARTY_NOTICES.txt'),'docs')]
@@ -34,4 +35,5 @@ a.binaries=[entry for entry in a.binaries
 pyz=PYZ(a.pure)
 exe=EXE(pyz,a.scripts,a.binaries,a.datas,[],name='COMSOLOrigin',
         debug=False,strip=False,upx=False,console=False,
+        icon=str(root/'assets/comsol-origin.ico'),
         disable_windowed_traceback=False,version=str(root/'packaging/version_info.txt'))
