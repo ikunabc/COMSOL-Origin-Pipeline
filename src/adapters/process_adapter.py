@@ -10,7 +10,7 @@ from ..models import Dataset
 log = logging.getLogger("pipeline")
 
 
-def validate_columns(dataset, config):
+def validate_columns(dataset, config, check_scale=True):
     df = dataset.data
     g = config["plot"]
     columns = [g["x_column"]] + g["y_columns"]
@@ -22,6 +22,11 @@ def validate_columns(dataset, config):
             )
         if not pd.api.types.is_numeric_dtype(df[col]):
             raise DataProcessingError(f"Plot column {col!r} contains non-numeric values.")
+    if check_scale:
+        validate_scale(df, g)
+
+
+def validate_scale(df, g):
     for axis, cols in [("x", [g["x_column"]]), ("y", g["y_columns"])]:
         if g["axis"][axis]["scale"] == "log10":
             finite = df[cols].to_numpy(dtype=float)
@@ -30,13 +35,28 @@ def validate_columns(dataset, config):
 
 
 def process(dataset, config):
-    validate_columns(dataset, config)
+    validate_columns(dataset, config, check_scale=False)
     p, g = config["processing"], config["plot"]
     x, ys = g["x_column"], g["y_columns"]
     selected = [x] + ys
     df = dataset.data.copy(deep=True)
     history = []
     try:
+        lower = p.get("x_data_min", "auto")
+        upper = p.get("x_data_max", "auto")
+        if lower != "auto" or upper != "auto":
+            keep = np.isfinite(df[x])
+            if lower != "auto":
+                keep &= df[x] >= lower
+            if upper != "auto":
+                keep &= df[x] <= upper
+            df = df.loc[keep].copy()
+            if df.empty:
+                raise DataProcessingError(
+                    f"X 列 {x} 在指定数据范围内没有数据：{lower} 至 {upper}。"
+                )
+            history.append(f"X data range [{lower}, {upper}]: retained {len(df)} rows")
+        validate_scale(df, g)
         bad = ~np.isfinite(df[selected].to_numpy(dtype=float)).all(axis=1)
         if bad.any():
             if p["drop_nan"]:

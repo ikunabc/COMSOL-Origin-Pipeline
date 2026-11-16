@@ -8,7 +8,7 @@ from pathlib import Path
 from ..exceptions import PipelineError
 from .comsol_adapter import normalize
 from .origin_adapter import OriginAdapter
-from .process_adapter import process, validate_columns
+from .process_adapter import process
 
 log = logging.getLogger("pipeline")
 
@@ -49,7 +49,8 @@ def plot_imported_project(project, entry, config):
         entry.get("comments", []),
         c["comsol"].get("column_map"),
     )
-    validate_columns(ds, c)
+    raw = ds.data
+    ds = process(ds, c)
     adapter = OriginAdapter(c)
     try:
         adapter.connect()
@@ -66,8 +67,6 @@ def plot_imported_project(project, entry, config):
                 book = candidate
         if book is None:
             raise PipelineError(f"Imported Workbook not found: {entry['name']}")
-        raw = ds.data.copy()
-        ds = process(ds, c)
         if not ds.data.equals(raw.reset_index(drop=True)):
             # Processing was explicitly configured: replace only this freshly
             # imported sheet, preserving all other imported workbooks.

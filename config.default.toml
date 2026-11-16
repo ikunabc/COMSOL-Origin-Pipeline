@@ -18,6 +18,8 @@ low_memory = false
 # "X (m)" = "x"
 
 [processing]
+x_data_min = "auto"
+x_data_max = "auto"
 drop_nan = true
 sort = true
 enable_smoothing = false

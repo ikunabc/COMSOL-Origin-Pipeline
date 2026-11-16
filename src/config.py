@@ -19,6 +19,7 @@ LEGEND_POSITION_MAP = {
     "bottom_left": (0, 0),
     "bottom_right": (1, 0),
 }
+X_DATA_RANGE_DEFAULTS = {("processing", "x_data_min"): "auto", ("processing", "x_data_max"): "auto"}
 
 
 def fail(key, message):
@@ -107,6 +108,13 @@ def prepare_config(c, path, check_input=True, create_outputs=True):
 
 def validate(c):
     co, p, o, g, e = (c[s] for s in ("comsol", "processing", "origin", "plot", "export"))
+    lower = p.get("x_data_min", "auto")
+    upper = p.get("x_data_max", "auto")
+    for key, value in [("x_data_min", lower), ("x_data_max", upper)]:
+        if value != "auto" and not numeric(value):
+            fail(f"[processing].{key}", 'must be finite numeric or "auto".')
+    if lower != "auto" and upper != "auto" and lower > upper:
+        fail("[processing]", "X 数据起点不能大于终点。")
     for section, keys in {
         "paths": ["output_dir", "processed_file"],
         "comsol": [

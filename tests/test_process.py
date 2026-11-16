@@ -65,3 +65,23 @@ def test_log_rejects_nonpositive(config):
     config["plot"]["axis"]["x"]["scale"] = "log10"
     with pytest.raises(DataProcessingError, match="positive"):
         process(sample(), config)
+
+
+def test_x_data_range_applies_before_log_scale_and_interpolation(config):
+    config["plot"]["axis"]["x"].update(scale="log10", min=2, max=9)
+    config["processing"].update(
+        x_data_min=1,
+        x_data_max=10,
+        enable_smoothing=False,
+        enable_interpolation=True,
+        interpolation_method="linear",
+        interpolation_points=5,
+    )
+    source = sample()
+    result = process(source, config)
+    np.testing.assert_allclose(result.data.x, [1, 3.25, 5.5, 7.75, 10])
+    assert len(source.data) == 21
+    config["processing"]["x_data_min"] = 9.5
+    config["processing"]["x_data_max"] = 9.8
+    with pytest.raises(DataProcessingError, match="指定数据范围内没有数据"):
+        process(source, config)

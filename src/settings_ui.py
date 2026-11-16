@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import COLOR_MAP, load_config, validate
+from .config import COLOR_MAP, X_DATA_RANGE_DEFAULTS, load_config, validate
 from .settings_presets import PresetStore
 
 
@@ -67,17 +67,29 @@ def save_updates(path, updates):
     original = path.read_text(encoding="utf-8")
     lines = original.splitlines(keepends=True)
     current = ""
+    headers = {}
     remaining = deepcopy(updates)
     for i, line in enumerate(lines):
         match = re.match(r"^\s*\[([^]]+)\]\s*(?:#.*)?$", line.strip())
         if match:
             current = match.group(1)
+            headers[current] = i
             continue
         match = re.match(r"^\s*([A-Za-z_][A-Za-z_0-9]*)\s*=", line)
         if match and (current, match.group(1)) in remaining:
             key = match.group(1)
             value = remaining.pop((current, key))
             lines[i] = f"{key} = {json.dumps(value, ensure_ascii=False)}\n"
+    new_range_values = []
+    for group, key in X_DATA_RANGE_DEFAULTS:
+        if (group, key) in remaining and group in headers:
+            value = remaining.pop((group, key))
+            new_range_values.append(f"{key} = {json.dumps(value, ensure_ascii=False)}\n")
+    if new_range_values:
+        header = headers["processing"]
+        if not lines[header].endswith("\n"):
+            lines[header] += "\n"
+        lines[header + 1 : header + 1] = new_range_values
     if remaining:
         raise ValueError(f"配置缺少字段：{list(remaining)}")
     text = "".join(lines)
@@ -169,6 +181,7 @@ class OriginSettingsDialog(QDialog):
         self.preset_combo.setEditText(selected)
 
     def validated_updates(self, updates):
+        updates = X_DATA_RANGE_DEFAULTS | updates
         expected = set(self.fields) | {
             ("plot", "y_columns"),
             ("plot.legend", "labels"),
@@ -207,7 +220,7 @@ class OriginSettingsDialog(QDialog):
         try:
             name = self.preset_combo.currentText().strip()
             updates = self.preset_store.load(name)
-            self.validated_updates(updates)
+            updates = self.validated_updates(updates)
             for key, (widget, kind) in self.fields.items():
                 value = updates[key]
                 if kind == "bool":
@@ -267,7 +280,8 @@ class OriginSettingsDialog(QDialog):
         return form
 
     def field(self, form, label, group, key, kind="text", choices=None):
-        value = section(self.raw, group)[key]
+        values = section(self.raw, group)
+        value = values[key] if key in values else X_DATA_RANGE_DEFAULTS[(group, key)]
         if kind == "bool":
             widget = QCheckBox()
             widget.setChecked(value)
@@ -447,21 +461,27 @@ class OriginSettingsDialog(QDialog):
 
     def build_axes(self):
         form = self.tab("坐标轴")
+        form.addRow(QLabel("— X 数据范围 —"))
+        self.field(form, "X 数据起点（含）", "processing", "x_data_min", "auto")
+        self.field(form, "X 数据终点（含）", "processing", "x_data_max", "auto")
+        note = QLabel("按所选 X 列筛选数据，填 auto 表示该侧不限。下方显示范围只设置图上的坐标轴。")
+        note.setWordWrap(True)
+        form.addRow(note)
         for name, title in [("x", "X 轴"), ("y", "Y 轴")]:
             form.addRow(QLabel("— " + title + " —"))
             group = "plot.axis." + name
             self.field(form, "标题", group, "title")
             self.field(form, "显示单位", group, "unit")
-            self.field(form, "最小值", group, "min", "auto")
-            self.field(form, "最大值", group, "max", "auto")
+            self.field(form, "显示范围起点（From）", group, "min", "auto")
+            self.field(form, "显示范围终点（To）", group, "max", "auto")
             self.field(form, "主刻度间隔", group, "major_step", "auto")
             self.field(
                 form,
-                "刻度类型",
+                "刻度类型（Scale）",
                 group,
                 "scale",
                 "combo",
-                [("线性", "linear"), ("以 10 为底的对数", "log10")],
+                [("线性（Linear）", "linear"), ("以 10 为底的对数（Log10）", "log10")],
             )
         note = QLabel("单位字段只设置坐标标题，不换算数据。m/s → μm/s 必须另行对数值乘以 10⁶。")
         note.setWordWrap(True)
