@@ -42,7 +42,6 @@ def main():
             return 0
         if "--smoke-test" not in sys.argv and "--legacy" not in sys.argv:
             import mph
-
             from src.integrated_ui import IntegratedDialog
 
             # Use the local rendering engine for native plot-group image exports.
